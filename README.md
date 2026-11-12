@@ -14,13 +14,13 @@ Skript se spouští na `https://www.xchat.cz/*`, pouze v hlavním okně; dostupn
 
 | Soubor | Funkce | Verze |
 | --- | --- | --- |
-| `xchat.user.js` | Společný instalační skript | 1.4.0 |
-| `export.user.js` | Čas neaktivity a export chatu | 2.4.0 |
-| `reklamy.user.js` | Skrývání reklam a systémového šeptání | 2.1.0 |
+| `xchat.user.js` | Společný instalační skript | 1.4.1 |
+| `export.user.js` | Čas neaktivity a export chatu | 2.4.1 |
+| `reklamy.user.js` | Skrývání reklam a systémového šeptání | 2.1.1 |
 | `mistnost.user.js` | Vyplnění nové místnosti | 1.0.1 |
-| `historie.user.js` | Zobrazení celé dostupné historie | 1.1.0 |
-| `zvuky.user.js` | Zvuky, MP3 pro každý typ a zvýraznění nicku | 1.5.0 |
-| `precteno.user.js` | Ruční hranice přečtených zpráv | 1.1.0 |
+| `historie.user.js` | Zobrazení celé dostupné historie | 1.1.1 |
+| `zvuky.user.js` | Zvuky, MP3 pro každý typ a zvýraznění nicku | 1.5.1 |
+| `precteno.user.js` | Ruční hranice přečtených zpráv | 1.1.1 |
 
 Moduly mají zachovaná původní jména a `@namespace`, tedy identitu pro samostatné instalace. Jejich verze byly zvýšeny o opravu kvůli novým aktualizačním metadatům. Obsah historie funguje i v kontextu společného skriptu s `@grant none`; skrývání reklam a systémového šeptání zahrnuje také celý výpis historie. Vlastní nastavení (sledované nicky, údaje místnosti apod.) zůstávají v odpovídajících modulech.
 
@@ -146,3 +146,10 @@ kliknutí do úplné historie s textovým/inline obsahem a čáry po překreslen
 Testy lze spustit pomocí `node --test tests/*.test.cjs`.
 DOM testy používají linkedom v dočasné složce: `npm install --prefix "$env:TEMP/xchat-dom-tests" --no-save --ignore-scripts linkedom` (PowerShell).
 Všechny userscripty prošly kontrolou syntaxe. V přihlášeném živém XChatu zatím změny ověřeny nebyly.
+
+## Oprava hledání formuláře (1.4.1)
+
+Panel už nevyžaduje stavovou třídu ac ani pevné přímé vnoření formuláře. Podporuje ID #crdiv2 i třídu .crdiv2 v sekci #cr2 a hledá v dostupných rámcích. Oprava má zvýšené verze všech pěti dotčených modulů a jejich @require; nastavení místnosti zůstává 1.0.1. Regresní testy zahrnují variantu ID a formulář bez ac.
+
+Ověřeno také přímo nad dodaným HTML rámce menupage (XChat_files/modchat(5).html) a samostatným rámcem textpage: všech pět sekcí vznikne bezprostředně za skutečným formulářem #cr2 #crdiv2 form. Celkem prošlo 16 testů; jde o DOM kontrolu uložené stránky, nikoli živé přihlášené relace.
+

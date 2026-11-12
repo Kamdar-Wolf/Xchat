@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         XChat – Zvuková výstraha na nick
 // @namespace    kamdar.xchat.sound
-// @version      1.5.0
+// @version      1.5.1
 // @description  Zvuky, vlastní MP3 a zvýraznění zmínek a šeptání přihlášenému uživateli.
 // @match        https://www.xchat.cz/*
 // @run-at       document-idle
@@ -572,7 +572,9 @@
     // Společné místo pro ovládání. Každý modul funguje i při samostatné instalaci.
     function settingsSection(documents, name, title, order) {
         for (const doc of documents) {
-            const form = doc.querySelector('div#cr2.ac > div.cr > div.crdiv2 > form');
+            // crdiv2 může být ID i třída; stavová třída ac se mění při rozbalení.
+            // Nesmíme podle ní podmiňovat samotné vytvoření nastavení.
+            const form = doc.querySelector('#cr2 #crdiv2 form, #cr2 .crdiv2 form, #cr2 form');
             if (!form) continue;
             let root = doc.getElementById('xchat-tools-settings');
             if (!root) {
