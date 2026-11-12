@@ -14,13 +14,13 @@ Skript se spouští na `https://www.xchat.cz/*`, pouze v hlavním okně; dostupn
 
 | Soubor | Funkce | Verze |
 | --- | --- | --- |
-| `xchat.user.js` | Společný instalační skript | 1.4.1 |
-| `export.user.js` | Čas neaktivity a export chatu | 2.4.1 |
-| `reklamy.user.js` | Skrývání reklam a systémového šeptání | 2.1.1 |
+| `xchat.user.js` | Společný instalační skript | 1.5.0 |
+| `export.user.js` | Čas neaktivity a export chatu | 2.4.2 |
+| `reklamy.user.js` | Skrývání reklam a systémového šeptání | 2.1.2 |
 | `mistnost.user.js` | Vyplnění nové místnosti | 1.0.1 |
-| `historie.user.js` | Zobrazení celé dostupné historie | 1.1.1 |
-| `zvuky.user.js` | Zvuky, MP3 pro každý typ a zvýraznění nicku | 1.5.1 |
-| `precteno.user.js` | Ruční hranice přečtených zpráv | 1.1.1 |
+| `historie.user.js` | Zobrazení celé dostupné historie | 1.1.2 |
+| `zvuky.user.js` | Vestavěné zvuky, vlastní MP3/WAV a zvýraznění nicku | 1.6.0 |
+| `precteno.user.js` | Ruční hranice přečtených zpráv | 1.1.2 |
 
 Moduly mají zachovaná původní jména a `@namespace`, tedy identitu pro samostatné instalace. Jejich verze byly zvýšeny o opravu kvůli novým aktualizačním metadatům. Obsah historie funguje i v kontextu společného skriptu s `@grant none`; skrývání reklam a systémového šeptání zahrnuje také celý výpis historie. Vlastní nastavení (sledované nicky, údaje místnosti apod.) zůstávají v odpovídajících modulech.
 
@@ -153,3 +153,19 @@ Panel už nevyžaduje stavovou třídu ac ani pevné přímé vnoření formulá
 
 Ověřeno také přímo nad dodaným HTML rámce menupage (XChat_files/modchat(5).html) a samostatným rámcem textpage: všech pět sekcí vznikne bezprostředně za skutečným formulářem #cr2 #crdiv2 form. Celkem prošlo 16 testů; jde o DOM kontrolu uložené stránky, nikoli živé přihlášené relace.
 
+
+## Vzhled bočního nastavení (1.4.2)
+
+Panel používá původní světle modré barvy XChatu, písmo Arial 12 px, kompaktní nadpisy, jemné oddělení sekcí a menší tlačítka. Exportní formáty jsou vedle sebe, počet zpráv pod nimi. Styly jsou omezené na #xchat-tools-settings a přebíjejí staré globální styly stránky pouze uvnitř panelu. Rozbalené zvuky mají samostatné skupiny a zalamovací řádek akcí. Vzhled byl zkontrolován v headless Edge nad dodaným HTML při šířce panelu 180 px, zavřená i rozbalená část zvuků; žádná pole ani tlačítka nepřetékala vodorovně.
+
+## Zvuky ze soukromého repozitáře (hlavní 1.5.0, zvuky 1.6.0)
+
+Přímé adresy tří WAV v soukromém repozitáři při kontrole vracely bez přihlášení HTTP 404. Receive.wav, login.wav a logout.wav jsou proto nyní přibalené přímo v BUNDLED_AUDIO uvnitř zvuky.user.js. Při přehrávání těchto nahrávek se neprovádí žádný požadavek na GitHub. Soubor skriptu je kvůli přiloženým datům větší.
+
+Každá skupina zvuku nyní nabízí volbu Zdroj zvuku: Přiložená nahrávka, Vlastní MP3 / WAV, nebo Původní tóny. U vlastní nahrávky se zobrazí pole pro veřejný HTTPS odkaz. Hlasitost ovládá přiložené i vlastní nahrávky. Test uloží nastavení a přehraje příslušný zvuk; původní tóny mají hlasitost v SOUND_* jako dosud. Staré uložené adresy přiložených WAV se převedou na vestavěné zdroje, hlasitost se zachová. Ostatní vlastní URL a vědomě zvolená prázdná URL zůstávají zachované.
+
+Po aktualizaci otevři Nastavení XChatu → Zvuky a zvýraznění → Nahrávky a hlasitost a použij Test. Pokud prohlížeč blokuje automatické přehrávání, nejprve je třeba zvuk povolit uživatelským kliknutím. Test stejného zdroje už nevytváří znovu přehrávač, takže neztrácí jeho předchozí aktivaci. Soukromé GitHub adresy pro jiné vlastní nahrávky stále nejsou veřejné audio odkazy; použij vestavěné zvuky nebo veřejně dostupnou nahrávku.
+
+Změněné skripty pro toto vydání: zvuky.user.js 1.6.0 a xchat.user.js 1.5.0. Ostatní moduly se nemění. Při změně souborů ve složce Zvuky je třeba obnovit také jejich base64 kopie v BUNDLED_AUDIO a zvýšit verze zvukového i hlavního skriptu.
+
+Ověření: 18 regresních testů včetně shody vložených dat se soubory WAV a převodu starých adres. V headless Edge skutečně proběhlo přehrání všech tří nahrávek (0,622 s / 2,180 s / 1,766 s), dále následné upozornění; síť byla pro tento test úplně blokovaná a neproběhl žádný externí požadavek. Živá přihlášená relace XChatu nebyla použita.
