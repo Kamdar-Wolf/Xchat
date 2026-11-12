@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         XChat – Čas neaktivity a export chatu
 // @namespace    kamdar.xchat.tools
-// @version      2.3.1
+// @version      2.4.0
 // @description  Export živého chatu i historie, filtry uživatelů a šeptání.
 // @match        https://www.xchat.cz/*
 // @run-at       document-idle
@@ -932,6 +932,44 @@
         controls.appendChild(counter);
     }
 
+    // Společné místo pro ovládání. Každý modul funguje i při samostatné instalaci.
+    function settingsSection(documents, name, title, order) {
+        for (const doc of documents) {
+            const form = doc.querySelector('div#cr2.ac > div.cr > div.crdiv2 > form');
+            if (!form) continue;
+            let root = doc.getElementById('xchat-tools-settings');
+            if (!root) {
+                root = doc.createElement('details');
+                root.id = 'xchat-tools-settings';
+                root.open = true;
+                root.style.cssText = 'display:block;clear:both;margin:12px 0;padding:12px;border:1px solid #aaa;background:#fafafa;color:#222;font:13px Arial,sans-serif;';
+                const summary = doc.createElement('summary');
+                summary.textContent = 'Nastavení XChatu';
+                summary.style.cssText = 'font-weight:bold;cursor:pointer;';
+                const content = doc.createElement('div');
+                content.id = 'xchat-tools-settings-content';
+                content.style.cssText = 'display:flex;flex-direction:column;gap:12px;margin-top:10px;';
+                root.append(summary, content);
+                // Ovládání nástrojů nesmí spouštět klikací obsluhu okolního chatu.
+                root.addEventListener('click', event => event.stopPropagation());
+            }
+            if (form.nextElementSibling !== root) form.after(root);
+            let section = doc.getElementById('xchat-tools-' + name);
+            if (!section) {
+                section = doc.createElement('section');
+                section.id = 'xchat-tools-' + name;
+                section.style.cssText = 'display:flex;flex-direction:column;align-items:stretch;gap:6px;min-width:0;order:' + order + ';';
+                const heading = doc.createElement('h4');
+                heading.textContent = title;
+                heading.style.margin = '0';
+                section.appendChild(heading);
+                root.querySelector('#xchat-tools-settings-content').appendChild(section);
+            }
+            return section;
+        }
+        return null;
+    }
+
     function installLinks(documents) {
         if (IS_HISTORY) {
             if (!document.body) return;
@@ -955,20 +993,18 @@
             return;
         }
 
-        const idle = findElement('#idleWrapper', documents);
-        const panel = idle?.closest('p');
+        const panel = settingsSection(documents, 'export', 'Export chatu', 10);
         if (!panel) return;
-
         const doc = panel.ownerDocument;
         if (doc.getElementById('xchat-export-controls')) return;
 
         const controls = doc.createElement('span');
         controls.id = 'xchat-export-controls';
         controls.style.cssText =
-            'float:right;white-space:nowrap;margin-left:10px;';
+            'display:flex;flex-direction:column;align-items:flex-start;gap:6px;white-space:normal;';
 
         fillControls(controls, doc);
-        panel.prepend(controls);
+        panel.appendChild(controls);
     }
 
     function tick() {

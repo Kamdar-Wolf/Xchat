@@ -14,13 +14,13 @@ Skript se spouští na `https://www.xchat.cz/*`, pouze v hlavním okně; dostupn
 
 | Soubor | Funkce | Verze |
 | --- | --- | --- |
-| `xchat.user.js` | Společný instalační skript | 1.3.0 |
-| `export.user.js` | Čas neaktivity a export chatu | 2.3.1 |
-| `reklamy.user.js` | Skrývání reklam a systémového šeptání | 2.0.1 |
+| `xchat.user.js` | Společný instalační skript | 1.4.0 |
+| `export.user.js` | Čas neaktivity a export chatu | 2.4.0 |
+| `reklamy.user.js` | Skrývání reklam a systémového šeptání | 2.1.0 |
 | `mistnost.user.js` | Vyplnění nové místnosti | 1.0.1 |
-| `historie.user.js` | Zobrazení celé dostupné historie | 1.0.1 |
-| `zvuky.user.js` | Zvuky, MP3 pro každý typ a zvýraznění nicku | 1.4.0 |
-| `precteno.user.js` | Ruční hranice přečtených zpráv | 1.0.0 |
+| `historie.user.js` | Zobrazení celé dostupné historie | 1.1.0 |
+| `zvuky.user.js` | Zvuky, MP3 pro každý typ a zvýraznění nicku | 1.5.0 |
+| `precteno.user.js` | Ruční hranice přečtených zpráv | 1.1.0 |
 
 Moduly mají zachovaná původní jména a `@namespace`, tedy identitu pro samostatné instalace. Jejich verze byly zvýšeny o opravu kvůli novým aktualizačním metadatům. Obsah historie funguje i v kontextu společného skriptu s `@grant none`; skrývání reklam a systémového šeptání zahrnuje také celý výpis historie. Vlastní nastavení (sledované nicky, údaje místnosti apod.) zůstávají v odpovídajících modulech.
 
@@ -51,7 +51,7 @@ Zmínky jsou žluté, příchozí šeptání fialové, také v celé historii. O
 Vlastní zprávy a šeptání jiným příjemcům se osobně nezvýrazňují. Sledované výrazy a příjemci v WATCHED_TERMS
  a WHISPER_NICKS zůstávají zachováni a mohou nezávisle spouštět zvuk zprávy.
 
-Otevři **Zvuky: nastavení** v informačním panelu chatu. Nastavení má tři samostatně popsané části:
+Pod formulářem otevři **Nastavení XChatu → Zvuky a zvýraznění → Nastavení zvuků**. Nastavení má tři samostatně popsané části:
 
 | Typ | Co jej spouští |
 | --- | --- |
@@ -95,7 +95,7 @@ Nový modul precteno.user.js 1.0.0 přidává červenou vodorovnou čáru s popi
 - Klikni levým tlačítkem na text poslední přečtené zprávy: čára se umístí nad tuto zprávu.
 - Novější zprávy nad čárou jsou nepřečtené, vybraná zpráva a starší zprávy pod ní přečtené.
 - Kliknutím na jinou zprávu čáru přesuneš.
-- Odkaz **Čára** v informačním panelu vypne nebo znovu zapne čáru i přesouvání kliknutím.
+- Odkaz **Čára** v nastavení pod formulářem vypne nebo znovu zapne čáru i přesouvání kliknutím.
 - Odkaz **Vymazat čáru** odstraní uložené místo. Dalším kliknutím na zprávu vybereš nové.
 
 Klikání na odkazy a ovládací prvky, klikání s Ctrl/Shift/Alt/Meta a označování textu značku neposouvá.
@@ -115,3 +115,34 @@ Ostatní moduly se nemění a jejich verze zůstávají zachované.
 Ověření: `node --test tests/precteno.test.cjs` — 5 testů. Pokrývají nové zprávy, překreslení a přepnutí
 historie, přesouvání kliknutím, odkazy a výběr textu, shodné zprávy, skrytí a změnu místnosti,
 a shodu všech šesti závislostí s verzemi modulů. Skutečný přihlášený XChat zatím ověřený není.
+
+## Společné nastavení a oprava úplné historie (1.4.0)
+
+Ovládání exportu, výpisu historie, systémového šeptání, zvuků, zvýraznění a čáry je přesunuté
+z horní lišty do jediného rozbalovacího panelu **Nastavení XChatu**, který je ve výchozím stavu otevřený.
+Panel je bezprostředně pod formulářem `div#cr2.ac > div.cr > div.crdiv2 > form` a má sekce v jednom sloupci.
+Pokud se formulář načte později nebo je v dostupném rámci, moduly ho při dalších kontrolách vyhledají.
+Bez tohoto formuláře se panel na jiné místo stránky nevkládá. Tlačítko pro vyplnění nové místnosti zůstává u formuláře nové místnosti;
+export v samostatném okně historie zůstává dostupný přímo v tomto okně.
+
+Zvuky se rozbalují nativním prvkem details/summary v této sekci. Jejich nastavení už nezávisí na přítomnosti
+živého výpisu ani na klikacím přepínači na liště. Vlastní WAV adresy receive.wav, login.wav, logout.wav i sledované nicky jsou zachované.
+
+Čára má vlastní sekci s návodem, přepínačem, vymazáním a tlačítkem **Zobrazit čáru u nejnovější zprávy**.
+To ji ihned ukotví nad nejnovější dostupnou zprávou, tedy označí dosavadní výpis jako přečtený.
+Potom ji přesuneš kliknutím na text libovolné zprávy. Samotné zapnutí přepínače bez výběru zprávy
+čáru nevytváří; pro první zobrazení použij toto tlačítko nebo klikni do chatu.
+
+Úplná historie nyní vytváří samostatný blok pro každý záznam zásobníku včetně systémových událostí,
+textových a inline HTML zpráv. Díky tomu lze určit kliknutou zprávu a umístění čáry i v úplném výpisu.
+Výběr se zachová při příchodu nových zpráv a překreslení historie. Kliknutí se zachytává také před obsluhou původního chatu.
+
+Verze tohoto vydání: hlavní 1.4.0, export 2.4.0, reklamy 2.1.0, historie 1.1.0, zvuky 1.5.0 a přečteno 1.1.0.
+Místnost zůstává 1.0.1. Nahraj všech pět změněných modulů a hlavní skript, hlavní jako poslední.
+Publikační adresy existujících souborů byly zachované, hlavní skript používá Kamdar-Wolf/Xchat.
+
+Kontroly: 13 testů včetně DOM testů všech pěti sekcí pod zadaným formulářem, ukládání zvuků,
+kliknutí do úplné historie s textovým/inline obsahem a čáry po překreslení.
+Testy lze spustit pomocí `node --test tests/*.test.cjs`.
+DOM testy používají linkedom v dočasné složce: `npm install --prefix "$env:TEMP/xchat-dom-tests" --no-save --ignore-scripts linkedom` (PowerShell).
+Všechny userscripty prošly kontrolou syntaxe. V přihlášeném živém XChatu zatím změny ověřeny nebyly.

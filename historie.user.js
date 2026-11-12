@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         XChat – Zobrazit všechny uložené zprávy
 // @namespace    kamdar.xchat.fullhistory
-// @version      1.0.1
+// @version      1.1.0
 // @description  Přepnutí mezi běžným výpisem a celou dostupnou historií chatu.
 // @match        https://www.xchat.cz/*
 // @run-at       document-idle
@@ -255,7 +255,15 @@
             const oldScroll = win.scrollY;
             const wasVisible = doc.body.classList.contains(ACTIVE_CLASS);
 
-            const content = createContent(doc, entries.join(''));
+            // Zásobník může obsahovat i text a inline prvky oddělené <br>.
+            // Každý záznam proto dostane vlastní blok: lze na něj kliknout a změřit jeho pozici.
+            const content = doc.createDocumentFragment();
+            for (const entry of entries) {
+                const row = doc.createElement('div');
+                row.dataset.xchatHistoryEntry = '1';
+                row.appendChild(createContent(doc, entry));
+                content.appendChild(row);
+            }
             currentView.replaceChildren(content);
 
             doc.body.classList.add(ACTIVE_CLASS);
@@ -290,11 +298,48 @@
         }
     }
 
+    // Společné místo pro ovládání. Každý modul funguje i při samostatné instalaci.
+    function settingsSection(documents, name, title, order) {
+        for (const doc of documents) {
+            const form = doc.querySelector('div#cr2.ac > div.cr > div.crdiv2 > form');
+            if (!form) continue;
+            let root = doc.getElementById('xchat-tools-settings');
+            if (!root) {
+                root = doc.createElement('details');
+                root.id = 'xchat-tools-settings';
+                root.open = true;
+                root.style.cssText = 'display:block;clear:both;margin:12px 0;padding:12px;border:1px solid #aaa;background:#fafafa;color:#222;font:13px Arial,sans-serif;';
+                const summary = doc.createElement('summary');
+                summary.textContent = 'Nastavení XChatu';
+                summary.style.cssText = 'font-weight:bold;cursor:pointer;';
+                const content = doc.createElement('div');
+                content.id = 'xchat-tools-settings-content';
+                content.style.cssText = 'display:flex;flex-direction:column;gap:12px;margin-top:10px;';
+                root.append(summary, content);
+                // Ovládání nástrojů nesmí spouštět klikací obsluhu okolního chatu.
+                root.addEventListener('click', event => event.stopPropagation());
+            }
+            if (form.nextElementSibling !== root) form.after(root);
+            let section = doc.getElementById('xchat-tools-' + name);
+            if (!section) {
+                section = doc.createElement('section');
+                section.id = 'xchat-tools-' + name;
+                section.style.cssText = 'display:flex;flex-direction:column;align-items:stretch;gap:6px;min-width:0;order:' + order + ';';
+                const heading = doc.createElement('h4');
+                heading.textContent = title;
+                heading.style.margin = '0';
+                section.appendChild(heading);
+                root.querySelector('#xchat-tools-settings-content').appendChild(section);
+            }
+            return section;
+        }
+        return null;
+    }
+
     function installControl(windows) {
         if (findElement(`#${CONTROL_ID}`, windows)) return;
 
-        const idle = findElement('#idleWrapper', windows);
-        const panel = idle?.closest('p');
+        const panel = settingsSection(windows.map(win => win.document), 'history', 'Výpis zpráv', 20);
 
         if (!panel) return;
 
@@ -303,7 +348,7 @@
         wrapper.id = CONTROL_ID;
 
         wrapper.style.cssText =
-            'float:right; white-space:nowrap; margin-left:10px;';
+            'display:flex;flex-direction:column;align-items:flex-start;gap:6px;white-space:normal;';
 
         const link = doc.createElement('a');
         link.href = '#';
@@ -335,7 +380,7 @@
         });
 
         wrapper.appendChild(link);
-        panel.prepend(wrapper);
+        panel.appendChild(wrapper);
     }
 
     // ============================================================

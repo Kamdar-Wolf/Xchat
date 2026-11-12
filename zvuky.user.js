@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         XChat – Zvuková výstraha na nick
 // @namespace    kamdar.xchat.sound
-// @version      1.4.0
+// @version      1.5.0
 // @description  Zvuky, vlastní MP3 a zvýraznění zmínek a šeptání přihlášenému uživateli.
 // @match        https://www.xchat.cz/*
 // @run-at       document-idle
@@ -569,20 +569,59 @@
     }
 
     // 7. NASTAVENÍ V CHATU: každý typ má vlastní URL, hlasitost, Test a obnovení tónů.
+    // Společné místo pro ovládání. Každý modul funguje i při samostatné instalaci.
+    function settingsSection(documents, name, title, order) {
+        for (const doc of documents) {
+            const form = doc.querySelector('div#cr2.ac > div.cr > div.crdiv2 > form');
+            if (!form) continue;
+            let root = doc.getElementById('xchat-tools-settings');
+            if (!root) {
+                root = doc.createElement('details');
+                root.id = 'xchat-tools-settings';
+                root.open = true;
+                root.style.cssText = 'display:block;clear:both;margin:12px 0;padding:12px;border:1px solid #aaa;background:#fafafa;color:#222;font:13px Arial,sans-serif;';
+                const summary = doc.createElement('summary');
+                summary.textContent = 'Nastavení XChatu';
+                summary.style.cssText = 'font-weight:bold;cursor:pointer;';
+                const content = doc.createElement('div');
+                content.id = 'xchat-tools-settings-content';
+                content.style.cssText = 'display:flex;flex-direction:column;gap:12px;margin-top:10px;';
+                root.append(summary, content);
+                // Ovládání nástrojů nesmí spouštět klikací obsluhu okolního chatu.
+                root.addEventListener('click', event => event.stopPropagation());
+            }
+            if (form.nextElementSibling !== root) form.after(root);
+            let section = doc.getElementById('xchat-tools-' + name);
+            if (!section) {
+                section = doc.createElement('section');
+                section.id = 'xchat-tools-' + name;
+                section.style.cssText = 'display:flex;flex-direction:column;align-items:stretch;gap:6px;min-width:0;order:' + order + ';';
+                const heading = doc.createElement('h4');
+                heading.textContent = title;
+                heading.style.margin = '0';
+                section.appendChild(heading);
+                root.querySelector('#xchat-tools-settings-content').appendChild(section);
+            }
+            return section;
+        }
+        return null;
+    }
+
     function installControl(documents) {
-        const panel = findElement('#idleWrapper', documents)?.closest('p');
+        const panel = settingsSection(documents, 'audio', 'Zvuky a zvýraznění', 40);
         if (!panel) return;
         const doc = panel.ownerDocument;
         if (doc.getElementById('xchat-sound-control')) return;
         const wrapper = doc.createElement('span');
         wrapper.id = 'xchat-sound-control';
-        wrapper.style.cssText = 'float:right;margin-left:10px;white-space:nowrap;';
-        const settings = doc.createElement('section');
+        wrapper.style.cssText = 'display:flex;flex-direction:column;align-items:flex-start;gap:6px;white-space:normal;';
+        const settings = doc.createElement('details');
         settings.id = 'xchat-audio-settings';
-        settings.hidden = true;
+        settings.open = false;
         settings.style.cssText = 'clear:both;padding:12px;margin:8px 0;background:#fafafa;color:#222;border:1px solid #aaa;font:13px Arial,sans-serif;';
-        const heading = doc.createElement('h3');
-        heading.textContent = 'Zvuková upozornění';
+        const heading = doc.createElement('summary');
+        heading.textContent = 'Nastavení zvuků — zprávy, příchody a odchody';
+        heading.style.cursor = 'pointer';
         heading.style.margin = '0 0 8px';
         const help = doc.createElement('p');
         help.textContent = 'Každý typ má vlastní nahrávku. Prázdný odkaz = původní melodie. Uložit použije nastavení, Test ho přehraje. Hlasitost platí pro MP3; hlasitost původních tónů je v SOUND_* v kódu.';
@@ -648,13 +687,6 @@
             group.append(legend, description, urlLabel, volumeLabel, saveButton, test, reset, status);
             settings.appendChild(group);
         }
-        const link = doc.createElement('a');
-        link.href = '#'; link.textContent = 'Zvuky: nastavení';
-        link.addEventListener('click', event => {
-            event.preventDefault(); settings.hidden = !settings.hidden;
-            link.textContent = settings.hidden ? 'Zvuky: nastavení' : 'Zvuky: zavřít nastavení';
-            updateStatus();
-        });
         const highlight = doc.createElement('a');
         highlight.href = '#'; highlight.className = 'xchat-highlight-status';
         highlight.style.marginLeft = '8px';
@@ -663,9 +695,8 @@
             try { localStorage.setItem(HIGHLIGHT_KEY, highlightEnabled ? '1' : '0'); } catch {}
             tick();
         });
-        wrapper.append(link, highlight);
-        panel.prepend(wrapper);
-        panel.after(settings);
+        wrapper.appendChild(highlight);
+        panel.append(wrapper, settings);
         updateStatus();
     }
 
@@ -676,13 +707,12 @@
         try {
             const documents = getDocuments();
             const board = findElement('#board', documents);
-            if (!board) return;
 
             updateOwnNick(documents);
             installHighlightStyles(documents);
             connectInteractions(documents);
             installControl(documents);
-            scan(board);
+            if (board) scan(board);
             for (const doc of documents) {
                 const history = doc.getElementById('kamdar-full-history-view');
                 if (history) for (const row of history.children) parseRow(row);

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         XChat – Značka přečtených zpráv
 // @namespace    kamdar.xchat.readmark
-// @version      1.0.0
+// @version      1.1.0
 // @description  Ručně přesouvatelná čára mezi přečtenými a nepřečtenými zprávami.
 // @match        https://www.xchat.cz/*
 // @run-at       document-idle
@@ -46,7 +46,8 @@
 
     function rowsOf(board) {
         return Array.from(board.children).filter(row =>
-            row.id !== 'splash' && /^\d{1,2}:\d{2}:\d{2}(?:\s|$)/.test(signature(row))
+            row.id !== 'splash' && (row.dataset?.xchatHistoryEntry === '1'
+                ? Boolean(signature(row)) : /^\d{1,2}:\d{2}:\d{2}/.test(signature(row)))
         );
     }
 
@@ -105,14 +106,52 @@
         return line;
     }
 
+    // Společné místo pro ovládání. Každý modul funguje i při samostatné instalaci.
+    function settingsSection(documents, name, title, order) {
+        for (const doc of documents) {
+            const form = doc.querySelector('div#cr2.ac > div.cr > div.crdiv2 > form');
+            if (!form) continue;
+            let root = doc.getElementById('xchat-tools-settings');
+            if (!root) {
+                root = doc.createElement('details');
+                root.id = 'xchat-tools-settings';
+                root.open = true;
+                root.style.cssText = 'display:block;clear:both;margin:12px 0;padding:12px;border:1px solid #aaa;background:#fafafa;color:#222;font:13px Arial,sans-serif;';
+                const summary = doc.createElement('summary');
+                summary.textContent = 'Nastavení XChatu';
+                summary.style.cssText = 'font-weight:bold;cursor:pointer;';
+                const content = doc.createElement('div');
+                content.id = 'xchat-tools-settings-content';
+                content.style.cssText = 'display:flex;flex-direction:column;gap:12px;margin-top:10px;';
+                root.append(summary, content);
+                // Ovládání nástrojů nesmí spouštět klikací obsluhu okolního chatu.
+                root.addEventListener('click', event => event.stopPropagation());
+            }
+            if (form.nextElementSibling !== root) form.after(root);
+            let section = doc.getElementById('xchat-tools-' + name);
+            if (!section) {
+                section = doc.createElement('section');
+                section.id = 'xchat-tools-' + name;
+                section.style.cssText = 'display:flex;flex-direction:column;align-items:stretch;gap:6px;min-width:0;order:' + order + ';';
+                const heading = doc.createElement('h4');
+                heading.textContent = title;
+                heading.style.margin = '0';
+                section.appendChild(heading);
+                root.querySelector('#xchat-tools-settings-content').appendChild(section);
+            }
+            return section;
+        }
+        return null;
+    }
+
     function installControl(documents) {
         for (const doc of documents) {
             if (doc.getElementById(CONTROL_ID)) continue;
-            const panel = doc.getElementById('idleWrapper')?.closest('p');
+            const panel = settingsSection([doc], 'read', 'Přečtené a nepřečtené zprávy', 50);
             if (!panel) continue;
             const wrapper = doc.createElement('span');
             wrapper.id = CONTROL_ID;
-            wrapper.style.cssText = 'float:right;white-space:nowrap;margin-left:10px;';
+            wrapper.style.cssText = 'display:flex;flex-direction:column;align-items:flex-start;gap:6px;white-space:normal;';
             const toggle = doc.createElement('a');
             toggle.href = '#';
             toggle.dataset.readAction = 'toggle';
@@ -130,8 +169,28 @@
                 anchor = null;
                 render();
             });
-            wrapper.append(toggle, clear);
-            panel.prepend(wrapper);
+            const place = doc.createElement('button');
+            place.type = 'button';
+            place.textContent = 'Zobrazit čáru u nejnovější zprávy';
+            place.addEventListener('click', () => {
+                enabled = true;
+                for (const chatDoc of getDocuments()) {
+                    for (const board of chatDoc.querySelectorAll(BOARDS)) {
+                        if (!board.getBoundingClientRect().height) continue;
+                        const first = rowsOf(board)[0];
+                        if (!first) continue;
+                        anchor = makeAnchor(board, first);
+                        render();
+                        return;
+                    }
+                }
+                doc.defaultView.alert('Výpis zpráv zatím není dostupný. Zkus to po načtení chatu.');
+            });
+            const help = doc.createElement('p');
+            help.textContent = 'Čára se zobrazí až po výběru zprávy. Klikni na text poslední přečtené zprávy, nebo použij tlačítko níže. Dalším kliknutím na zprávu ji přesuneš.';
+            help.style.margin = '0';
+            wrapper.append(help, place, toggle, clear);
+            panel.appendChild(wrapper);
         }
     }
 
@@ -146,7 +205,8 @@
         for (const doc of documents) {
             if (!connected.has(doc)) {
                 connected.add(doc);
-                doc.addEventListener('click', onChatClick);
+                // Zachytíme kliknutí i když je původní chat při bublání zastaví.
+                doc.addEventListener('click', onChatClick, true);
                 doc.addEventListener('scroll', render, true);
                 doc.defaultView.addEventListener('resize', render);
             }
