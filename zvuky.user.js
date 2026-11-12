@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         XChat – Zvuková výstraha na nick
 // @namespace    kamdar.xchat.sound
-// @version      1.2.2
-// @description  Zvuky sledovaných zpráv, příchodů a odchodů uživatelů.
+// @version      1.4.0
+// @description  Zvuky, vlastní MP3 a zvýraznění zmínek a šeptání přihlášenému uživateli.
 // @match        https://www.xchat.cz/*
 // @run-at       document-idle
 // @grant        none
@@ -21,14 +21,50 @@
 
     const WATCHED_TERMS = [
         'Sidian',
+        'Woif',
         // 'Kamdar',
         // 'ahoj všichni',
     ];
 
     const WHISPER_NICKS = [
         'Sidian',
+        'Woif',
         // 'Kamdar',
     ];
+
+    // 1. NASTAVENÍ NAHRÁVEK: každý typ má vlastní URL a hlasitost 0–1.
+    // Prázdná URL používá původní tóny definované v SOUND_* níže.
+    // Volby uložené přes panel v chatu mají přednost před těmito výchozími hodnotami.
+    const AUDIO_DEFAULTS = {
+        message: { url: 'https://github.com/Kamdar-Wolf/Xchat/raw/refs/heads/main/Zvuky/receive.wav', volume: 1.0 },
+        arrival: { url: 'https://github.com/Kamdar-Wolf/Xchat/raw/refs/heads/main/Zvuky/login.wav', volume: 1.0 },
+        departure: { url: 'https://github.com/Kamdar-Wolf/Xchat/raw/refs/heads/main/Zvuky/logout.wav', volume: 1.0 },
+    };
+    const SOUND_TYPES = {
+        message: { label: 'Zpráva / zmínka / šeptání', description: 'Zmínka přihlášeného nicku, příchozí šeptání nebo shoda se sledovaným výrazem či příjemcem.' },
+        arrival: { label: 'Příchod do místnosti', description: 'Systémová zpráva o vstupu kteréhokoli uživatele do místnosti.' },
+        departure: { label: 'Odchod z místnosti', description: 'Systémová zpráva o odchodu, odpojení nebo vyhození uživatele.' },
+    };
+    const AUDIO_KEY = 'kamdar.xchat.audioSettings';
+    const HIGHLIGHT_KEY = 'kamdar.xchat.highlightSelf';
+    const NICK_SELECTOR = 'body > form > table > tbody > tr > td.tdb > strong';
+    const audioSettings = Object.fromEntries(Object.entries(AUDIO_DEFAULTS).map(([kind, config]) => [kind, { ...config }]));
+    let highlightEnabled = true;
+    try {
+        const stored = JSON.parse(localStorage.getItem(AUDIO_KEY) || 'null');
+        for (const kind of Object.keys(SOUND_TYPES)) {
+            if (typeof stored?.[kind]?.url === 'string') audioSettings[kind].url = stored[kind].url;
+            if (Number.isFinite(stored?.[kind]?.volume)) audioSettings[kind].volume = Math.max(0, Math.min(1, stored[kind].volume));
+        }
+        // Převod MP3 zprávy ze starší verze bez ztráty uživatelova nastavení.
+        if (!stored) audioSettings.message.url = localStorage.getItem('kamdar.xchat.messageAudioUrl') ?? AUDIO_DEFAULTS.message.url;
+        highlightEnabled = localStorage.getItem(HIGHLIGHT_KEY) !== '0';
+    } catch { /* Při nedostupném úložišti fungují nastavení po dobu otevřené stránky. */ }
+    let ownNick = '';
+    let ownPattern = null;
+    // Přehrávač i stav jsou oddělené: chyba MP3 příchodu neovlivní zvuk zprávy.
+    const mediaPlayers = new Map();
+    const mediaStates = new Map();
 
     const WHOLE_WORDS = true;
     const INCLUDE_SYSTEM = true;
@@ -216,25 +252,77 @@
         return null;
     }
 
-    // ---------- Aktivace zvuku ----------
-
-    function updateStatus() {
-        const link = findElement(
-            '#xchat-sound-control .xchat-sound-status'
-        );
-
-        if (!link) return;
-
-        const ready = audio?.state === 'running';
-
-        link.textContent = ready
-            ? 'Zvuk: zapnutý'
-            : 'Zvuk: odblokovat';
-
-        link.title = ready
-            ? 'Zvuky jsou aktivní. Kliknutí otestuje zvuk zprávy.'
-            : 'Kliknutím povol přehrávání zvuku.';
+    // ---------- Přihlášený nick a zvýraznění ----------
+    function updateOwnNick(documents) {
+        const nick = normalize(findElement(NICK_SELECTOR, documents)?.textContent || '');
+        if (nick === ownNick) return;
+        ownNick = nick;
+        ownPattern = nick ? new RegExp("(^|[^\\p{L}\\p{N}_])" + escapeRegex(nick) + "(?=$|[^\\p{L}\\p{N}_])", 'iu') : null;
     }
+    function markRow(row, mention = false, whisper = false) {
+        row.classList.toggle('xchat-self-mention', highlightEnabled && mention && !whisper);
+        row.classList.toggle('xchat-self-whisper', highlightEnabled && whisper);
+    }
+    function installHighlightStyles(documents) {
+        for (const doc of documents) {
+            if (doc.getElementById('xchat-self-highlight-style')) continue;
+            const style = doc.createElement('style');
+            style.id = 'xchat-self-highlight-style';
+            style.textContent = '.xchat-self-mention { background: #fff0ad !important; color: #241b00 !important; box-shadow: inset 4px 0 #d69500; padding-left: 7px; }'
+                + '.xchat-self-whisper { background: #e7d9ff !important; color: #25103d !important; box-shadow: inset 4px 0 #8545c1; padding-left: 7px; }';
+            (doc.head || doc.documentElement)?.appendChild(style);
+        }
+    }
+
+    // 2. PŘEHRÁNÍ MP3: samostatný přehrávač pro každý typ události.
+    function playFileAudio(kind) {
+        const config = audioSettings[kind];
+        try {
+            const url = new URL(config.url);
+            if (url.protocol !== 'https:') throw new Error('Použij přímý HTTPS odkaz na zvuk.');
+            let player = mediaPlayers.get(kind);
+            if (!player) {
+                player = new window.Audio(url.href);
+                player.preload = 'auto';
+                mediaPlayers.set(kind, player);
+            }
+            player.volume = config.volume;
+            player.currentTime = 0;
+            mediaStates.set(kind, 'Načítání nahrávky…');
+            const currentPlayer = player;
+            Promise.resolve(player.play()).then(() => {
+                if (mediaPlayers.get(kind) !== currentPlayer) return;
+                mediaStates.set(kind, 'MP3 připravena');
+                updateStatus();
+            }).catch(error => {
+                if (mediaPlayers.get(kind) !== currentPlayer) return;
+                mediaStates.set(kind, error.name === 'NotAllowedError'
+                    ? 'Přehrávání blokováno — klikni na Test.'
+                    : 'Chyba MP3 — ověř přímý odkaz a dostupnost souboru.');
+                console.warn('XChat: ' + SOUND_TYPES[kind].label, error);
+                updateStatus();
+            });
+        } catch (error) {
+            mediaStates.set(kind, error.message);
+        }
+        updateStatus();
+    }
+
+    // 3. STAV OVLÁDÁNÍ: každý řádek říká, zda používá MP3 nebo původní melodii.
+    function updateStatus() {
+        for (const doc of getDocuments()) {
+            for (const kind of Object.keys(SOUND_TYPES)) {
+                const status = doc.getElementById('xchat-audio-status-' + kind);
+                if (!status) continue;
+                status.textContent = audioSettings[kind].url
+                    ? (mediaStates.get(kind) || 'Vlastní MP3 — vyzkoušej tlačítkem Test')
+                    : (audio?.state === 'running' ? 'Původní melodie — připravena' : 'Původní melodie — povol tlačítkem Test');
+            }
+        }
+    }
+
+    // Web Audio se používá jen pro původní syntetické melodie.
+
 
     function createAudio() {
         if (audio) return;
@@ -285,9 +373,18 @@
         }
     }
 
-    // ---------- Přehrávání melodií ----------
+    // 4. VÝBĚR ZDROJE: vlastní MP3 má přednost, prázdná URL přehrává SOUND_* tóny.
+    // Omezení 1,5 s platí zvlášť pro každý typ; ruční Test jej obchází.
 
     function playSound(kind, test = false) {
+        if (!SOUND_TYPES[kind]) return;
+        if (audioSettings[kind].url) {
+            const now = performance.now();
+            if (!test && now - (lastPlayed.get(kind) ?? -Infinity) < 1500) return;
+            lastPlayed.set(kind, now);
+            playFileAudio(kind);
+            return;
+        }
         if (!audio || audio.state !== 'running') {
             updateStatus();
             return;
@@ -351,9 +448,10 @@
         nextSoundAt = base + totalDuration + 0.12;
     }
 
-    // ---------- Rozpoznání zpráv a událostí ----------
+    // 5. ROZPOZNÁNÍ UDÁLOSTI: nejprve příchod/odchod, potom zmínky a šeptání.
 
     function parseRow(row) {
+        markRow(row);
         if (row.id === 'splash') return null;
 
         const text = normalize(row.textContent);
@@ -413,7 +511,15 @@
         const recipient = normalize(whisper?.[2] || '')
             .toLocaleLowerCase();
 
-        const matches = (INCLUDE_SYSTEM || !isSystem)
+        const sender = normalize(whisper?.[1] || label.replace(/:\s*$/, '')).toLocaleLowerCase();
+        const self = ownNick.toLocaleLowerCase();
+        const fromSelf = Boolean(self && sender === self);
+        const personalWhisper = Boolean(self && !fromSelf && recipient === self && !isSystem);
+        const personalMention = Boolean(ownPattern && !fromSelf && !isSystem
+            && (!whisper || recipient === self) && ownPattern.test(message));
+        markRow(row, personalMention, personalWhisper);
+
+        const matches = personalWhisper || personalMention || (INCLUDE_SYSTEM || !isSystem)
             && (
                 recipients.has(recipient)
                 || patterns.some(pattern => pattern.test(message))
@@ -425,7 +531,7 @@
         };
     }
 
-    // ---------- Pouze nové záznamy ----------
+    // 6. NOVÉ ZPRÁVY: první výpis je tichý, opakovaná kontrola nehraje staré zprávy.
 
     function scan(board) {
         const occurrences = new Map();
@@ -462,44 +568,109 @@
         }
     }
 
-    // ---------- Jediný odkaz v panelu ----------
-
+    // 7. NASTAVENÍ V CHATU: každý typ má vlastní URL, hlasitost, Test a obnovení tónů.
     function installControl(documents) {
-        const idle = findElement('#idleWrapper', documents);
-        const panel = idle?.closest('p');
+        const panel = findElement('#idleWrapper', documents)?.closest('p');
         if (!panel) return;
-
         const doc = panel.ownerDocument;
         if (doc.getElementById('xchat-sound-control')) return;
-
         const wrapper = doc.createElement('span');
         wrapper.id = 'xchat-sound-control';
-        wrapper.style.cssText =
-            'float:right;margin-left:10px;white-space:nowrap;';
-
+        wrapper.style.cssText = 'float:right;margin-left:10px;white-space:nowrap;';
+        const settings = doc.createElement('section');
+        settings.id = 'xchat-audio-settings';
+        settings.hidden = true;
+        settings.style.cssText = 'clear:both;padding:12px;margin:8px 0;background:#fafafa;color:#222;border:1px solid #aaa;font:13px Arial,sans-serif;';
+        const heading = doc.createElement('h3');
+        heading.textContent = 'Zvuková upozornění';
+        heading.style.margin = '0 0 8px';
+        const help = doc.createElement('p');
+        help.textContent = 'Každý typ má vlastní nahrávku. Prázdný odkaz = původní melodie. Uložit použije nastavení, Test ho přehraje. Hlasitost platí pro MP3; hlasitost původních tónů je v SOUND_* v kódu.';
+        settings.append(heading, help);
+        for (const [kind, type] of Object.entries(SOUND_TYPES)) {
+            const group = doc.createElement('fieldset');
+            group.style.cssText = 'margin:8px 0;padding:10px;min-width:0;';
+            const legend = doc.createElement('legend');
+            legend.textContent = type.label;
+            legend.style.fontWeight = 'bold';
+            const description = doc.createElement('p');
+            description.textContent = type.description;
+            description.style.margin = '0 0 8px';
+            const urlLabel = doc.createElement('label');
+            urlLabel.textContent = 'Přímý HTTPS odkaz na MP3: ';
+            const input = doc.createElement('input');
+            input.type = 'url';
+            input.value = audioSettings[kind].url;
+            input.placeholder = 'https://…/oznameni.mp3';
+            input.style.cssText = 'width:100%;box-sizing:border-box;margin:4px 0 8px;';
+            urlLabel.appendChild(input);
+            const volumeLabel = doc.createElement('label');
+            volumeLabel.textContent = 'Hlasitost MP3 (0–1): ';
+            const volume = doc.createElement('input');
+            volume.type = 'number'; volume.min = '0'; volume.max = '1'; volume.step = '0.05';
+            volume.value = String(audioSettings[kind].volume);
+            volume.style.width = '65px';
+            volumeLabel.appendChild(volume);
+            const status = doc.createElement('p');
+            status.id = 'xchat-audio-status-' + kind;
+            status.setAttribute('aria-live', 'polite');
+            const save = () => {
+                const url = input.value.trim();
+                const loudness = Number(volume.value);
+                try { if (url && new URL(url).protocol !== 'https:') throw new Error(); }
+                catch { doc.defaultView.alert(type.label + ': zadej platný přímý HTTPS odkaz.'); return false; }
+                if (!volume.value.trim() || !Number.isFinite(loudness) || loudness < 0 || loudness > 1) {
+                    doc.defaultView.alert(type.label + ': hlasitost musí být číslo 0 až 1.'); return false;
+                }
+                mediaPlayers.get(kind)?.pause();
+                mediaPlayers.delete(kind);
+                mediaStates.delete(kind);
+                audioSettings[kind] = { url, volume: loudness };
+                try { localStorage.setItem(AUDIO_KEY, JSON.stringify(audioSettings)); }
+                catch { doc.defaultView.alert('Nastavení platí pro tuto stránku; prohlížeč nepovolil jeho trvalé uložení.'); }
+                updateStatus();
+                return true;
+            };
+            const button = (label, action) => {
+                const el = doc.createElement('button');
+                el.type = 'button'; el.textContent = label;
+                el.style.marginLeft = '8px'; el.addEventListener('click', action);
+                return el;
+            };
+            const saveButton = button('Uložit', save);
+            const test = button('Test', () => {
+                if (!save()) return;
+                // MP3 se musí spustit přímo během kliknutí, ještě před await.
+                if (audioSettings[kind].url) playSound(kind, true);
+                else unlockAudio().then(ready => { if (ready) playSound(kind, true); });
+            });
+            const reset = button('Původní melodie', () => { input.value = ''; save(); });
+            group.append(legend, description, urlLabel, volumeLabel, saveButton, test, reset, status);
+            settings.appendChild(group);
+        }
         const link = doc.createElement('a');
-        link.href = '#';
-        link.className = 'xchat-sound-status';
-        link.textContent = 'Zvuk: odblokovat';
-
-        link.addEventListener('click', async event => {
-            event.preventDefault();
-
-            const ready = await unlockAudio();
-
-            if (ready) {
-                playSound('message', true);
-            } else {
-                alert(
-                    'Prohlížeč blokuje zvuk. Povol pro XChat automatické přehrávání zvuku.'
-                );
-            }
+        link.href = '#'; link.textContent = 'Zvuky: nastavení';
+        link.addEventListener('click', event => {
+            event.preventDefault(); settings.hidden = !settings.hidden;
+            link.textContent = settings.hidden ? 'Zvuky: nastavení' : 'Zvuky: zavřít nastavení';
+            updateStatus();
         });
-
-        wrapper.appendChild(link);
+        const highlight = doc.createElement('a');
+        highlight.href = '#'; highlight.className = 'xchat-highlight-status';
+        highlight.style.marginLeft = '8px';
+        highlight.addEventListener('click', event => {
+            event.preventDefault(); highlightEnabled = !highlightEnabled;
+            try { localStorage.setItem(HIGHLIGHT_KEY, highlightEnabled ? '1' : '0'); } catch {}
+            tick();
+        });
+        wrapper.append(link, highlight);
         panel.prepend(wrapper);
+        panel.after(settings);
         updateStatus();
     }
+
+    // 8. PRŮBĚŽNÁ KONTROLA: zvuky jen ze živého chatu, kopie historie jen zvýrazníme.
+
 
     function tick() {
         try {
@@ -507,10 +678,20 @@
             const board = findElement('#board', documents);
             if (!board) return;
 
-            createAudio();
+            updateOwnNick(documents);
+            installHighlightStyles(documents);
             connectInteractions(documents);
             installControl(documents);
             scan(board);
+            for (const doc of documents) {
+                const history = doc.getElementById('kamdar-full-history-view');
+                if (history) for (const row of history.children) parseRow(row);
+                const control = doc.querySelector('.xchat-highlight-status');
+                if (control) {
+                    control.textContent = 'Zvýraznění: ' + (highlightEnabled ? 'zapnuto' : 'vypnuto');
+                    control.title = ownNick ? 'Přihlášený nick: ' + ownNick : 'Čekám na nick ve spodní liště.';
+                }
+            }
             updateStatus();
         } catch (error) {
             console.error('XChat: chyba zvukové výstrahy.', error);
