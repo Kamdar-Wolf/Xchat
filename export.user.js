@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         XChat – Čas neaktivity a export chatu
 // @namespace    kamdar.xchat.tools
-// @version      2.4.2
+// @version      2.5.0
 // @description  Export živého chatu i historie, filtry uživatelů a šeptání.
 // @match        https://www.xchat.cz/*
 // @run-at       document-idle
@@ -21,6 +21,16 @@
 
     const IDLE_LIMIT_SECONDS = 600; // 600 = 10 minut
     const AUTO_COMMAND = '/S';
+    const PRESENCE_FILTER_KEY = 'kamdar.xchat.export.hidePresence';
+    let hidePresence = false;
+    try { hidePresence = localStorage.getItem(PRESENCE_FILTER_KEY) === '1'; } catch {}
+
+    // Pouze příchody/odchody systémového původu. Text běžných zpráv nefiltrujeme.
+    const PRESENCE_PATTERN = /(?:vstoupil[ao]?|vešel|vešla|přišel|přišla)\s+(?:do\s+)?místnosti|připojil[ao]?\s+se\s+(?:do|k)\s+místnosti|opustil[ao]?\s+místnost|(?:odešel|odešla|vystoupil[ao]?)\s+(?:z|ze)\s+místnosti|odpojil[ao]?\s+se|(?:byl|byla)\s+(?:vyhozen|vyhozena|odpojen|odpojena)/iu;
+
+    function exportMessages(messages) {
+        return hidePresence ? messages.filter(record => !record.presenceEvent) : messages;
+    }
 
     const IS_HISTORY = /\/room\/history\.html\/?$/.test(
         location.pathname
@@ -374,6 +384,9 @@
             type,
             text,
             fullText,
+            presenceEvent: type === 'Systémová událost' && (
+                Boolean(row.querySelector('.system.in, .system.out')) || PRESENCE_PATTERN.test(text)
+            ),
             ...parseParticipants(row, text, type),
             links: Array.from(row.querySelectorAll('a[href]')).map(a => ({
                 text: a.textContent.trim(),
@@ -436,7 +449,9 @@
         );
 
         if (counter) {
-            counter.textContent = ` (${archive.size} zpráv)`;
+            counter.textContent = hidePresence
+                ? ` (${exportMessages(Array.from(archive.values())).length} / ${archive.size} zpráv)`
+                : ` (${archive.size} zpráv)`;
         }
     }
 
@@ -648,6 +663,7 @@
                 + ` data-sender="${esc(record.sender)}"`
                 + ` data-recipient="${esc(record.recipient)}"`
                 + ` data-whisper="${record.whisper ? '1' : '0'}"`
+                + ` data-presence="${record.presenceEvent ? '1' : '0'}"`
                 + ` title="${esc(record.type)}"`
                 + ` style="background-color:${esc(record.background)}">`
                 + record.html + '</div>';
@@ -741,6 +757,7 @@
         <option value="only">Pouze šeptání</option>
     </select>
 </label>
+<label><input type="checkbox" id="presence-filter"> Skrýt příchody a odchody</label>
 <span id="visible-count" role="status" aria-live="polite"></span>
 </div>
 
@@ -756,6 +773,7 @@
 
     const userFilter = document.getElementById('user-filter');
     const whisperFilter = document.getElementById('whisper-filter');
+    const presenceFilter = document.getElementById('presence-filter');
     const counter = document.getElementById('visible-count');
 
     const lower = value => value.normalize('NFC').toLocaleLowerCase();
@@ -834,7 +852,8 @@
                         && pairKey(sender, recipient) === selectedWhisper
                 );
 
-            row.hidden = !(userMatches && whisperMatches);
+            const presenceMatches = !presenceFilter.checked || row.dataset.presence !== '1';
+            row.hidden = !(userMatches && whisperMatches && presenceMatches);
             if (!row.hidden) visible++;
         }
 
@@ -844,6 +863,7 @@
 
     userFilter.addEventListener('change', applyFilters);
     whisperFilter.addEventListener('change', applyFilters);
+    presenceFilter.addEventListener('change', applyFilters);
 
     applyFilters();
 })();
@@ -860,10 +880,11 @@
             captureBoard();
         }
 
-        const messages = Array.from(archive.values());
+        // Jediný filtr před sestavením TXT, Markdownu i HTML; archiv zůstává úplný.
+        const messages = exportMessages(Array.from(archive.values()));
 
         if (!messages.length) {
-            alert('Zatím nebyly rozpoznány žádné zprávy.');
+            alert(archive.size ? 'Po vynechání příchodů a odchodů nezůstaly žádné zprávy.' : 'Zatím nebyly rozpoznány žádné zprávy.');
             return;
         }
 
@@ -929,6 +950,26 @@
         counter.className = 'xchat-export-count';
         counter.textContent = ` (${archive.size} zpráv)`;
         controls.appendChild(counter);
+
+        const label = doc.createElement('label');
+        label.style.cssText = 'display:flex!important;align-items:center;gap:5px;flex-basis:100%;font-size:11px;';
+        const checkbox = doc.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.className = 'xchat-export-hide-presence';
+        checkbox.checked = hidePresence;
+        checkbox.style.cssText = 'width:auto;height:auto;flex:none;';
+        label.append(checkbox, doc.createTextNode('Vynechat příchody a odchody'));
+        label.title = 'Platí pro TXT, Markdown i HTML. Ostatní systémové události a zprávy zůstanou zachované.';
+        checkbox.addEventListener('change', () => {
+            hidePresence = checkbox.checked;
+            try { localStorage.setItem(PRESENCE_FILTER_KEY, hidePresence ? '1' : '0'); } catch {}
+            for (const target of getDocuments()) {
+                for (const input of target.querySelectorAll('.xchat-export-hide-presence')) input.checked = hidePresence;
+            }
+            updateCounter();
+        });
+        controls.appendChild(label);
+        updateCounter();
     }
 
     // Společné místo pro ovládání. Každý modul funguje i při samostatné instalaci.

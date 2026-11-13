@@ -14,8 +14,8 @@ Skript se spouští na `https://www.xchat.cz/*`, pouze v hlavním okně; dostupn
 
 | Soubor | Funkce | Verze |
 | --- | --- | --- |
-| `xchat.user.js` | Společný instalační skript | 1.5.0 |
-| `export.user.js` | Čas neaktivity a export chatu | 2.4.2 |
+| `xchat.user.js` | Společný instalační skript | 1.6.0 |
+| `export.user.js` | Čas neaktivity a export chatu | 2.5.0 |
 | `reklamy.user.js` | Skrývání reklam a systémového šeptání | 2.1.2 |
 | `mistnost.user.js` | Vyplnění nové místnosti | 1.0.1 |
 | `historie.user.js` | Zobrazení celé dostupné historie | 1.1.2 |
@@ -169,3 +169,11 @@ Po aktualizaci otevři Nastavení XChatu → Zvuky a zvýraznění → Nahrávky
 Změněné skripty pro toto vydání: zvuky.user.js 1.6.0 a xchat.user.js 1.5.0. Ostatní moduly se nemění. Při změně souborů ve složce Zvuky je třeba obnovit také jejich base64 kopie v BUNDLED_AUDIO a zvýšit verze zvukového i hlavního skriptu.
 
 Ověření: 18 regresních testů včetně shody vložených dat se soubory WAV a převodu starých adres. V headless Edge skutečně proběhlo přehrání všech tří nahrávek (0,622 s / 2,180 s / 1,766 s), dále následné upozornění; síť byla pro tento test úplně blokovaná a neproběhl žádný externí požadavek. Živá přihlášená relace XChatu nebyla použita.
+
+## Export bez příchodů a odchodů (hlavní 1.6.0, export 2.5.0)
+
+V sekci Export chatu je volba Vynechat příchody a odchody. Platí pro TXT, Markdown i HTML, pro export živého chatu i samostatné historie. Ukládá se pro další použití. Při zaškrtnutí se pod exportními tlačítky ukazuje počet ponechaných zpráv z celkového počtu. Archiv zůstává úplný; odškrtnutím lze znovu exportovat celý obsah. Filtr vynechá systémové vstupy, odchody, odpojení a vyhození. Ostatní systémové události, šeptání a běžné zprávy zachová, i když jejich text popisuje příchod nebo odchod.
+
+Každý nově vytvořený HTML export má také samostatný přepínač Skrýt příchody a odchody, který se kombinuje s filtrem uživatelů a šeptání. Jde o dodatečné skrytí při čtení; záznamy už vynechané před stažením v souboru nejsou a přepínač je nemůže obnovit. Dříve vytvořené exporty se zpětně nemění. Přiložený ukázkový soubor zůstal beze změny.
+
+Prošlo 21 testů včetně filtru všech formátů, přepínání v HTML, zachování běžných zpráv a kontroly vzorku dodaného exportu. Pro vydání nahraj export.user.js 2.5.0 a xchat.user.js 1.6.0; ostatní skripty ani jejich verze se nemění.
