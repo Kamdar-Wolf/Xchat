@@ -4,8 +4,8 @@ Jedna instalace do Tampermonkey pro všech šest modulů. Hlavní skript automat
 
 ## Instalace
 
-1. Nahraj všechny soubory `*.user.js` do kořene větve `main` repozitáře `Martin-CHT/Xchat`. Zachovej názvy souborů.
-2. V prohlížeči s Tampermonkey otevři [instalační odkaz](https://github.com/Martin-CHT/Xchat/raw/refs/heads/main/xchat.user.js) a potvrď instalaci.
+1. Nahraj všechny soubory `*.user.js` do kořene větve `main` repozitáře `Kamdar-Wolf/Xchat`. Zachovej názvy souborů.
+2. V prohlížeči s Tampermonkey otevři [instalační odkaz](https://github.com/Kamdar-Wolf/Xchat/raw/refs/heads/main/xchat.user.js) a potvrď instalaci.
 3. Pokud máš původní samostatné skripty nainstalované, vypni je nebo odinstaluj, aby se funkce nespouštěly dvakrát. Obnov otevřené stránky XChatu.
 
 Skript se spouští na `https://www.xchat.cz/*`, pouze v hlavním okně; dostupné rámce procházejí jednotlivé moduly. Vyplnění místnosti se aktivuje pouze na stránce `create_room`. Zvuk je potřeba odblokovat kliknutím na ovládací prvek v chatu.
@@ -14,8 +14,8 @@ Skript se spouští na `https://www.xchat.cz/*`, pouze v hlavním okně; dostupn
 
 | Soubor | Funkce | Verze |
 | --- | --- | --- |
-| `xchat.user.js` | Společný instalační skript | 1.6.0 |
-| `export.user.js` | Čas neaktivity a export chatu | 2.5.0 |
+| `xchat.user.js` | Společný instalační skript | 1.7.0 |
+| `export.user.js` | Nastavitelný čas neaktivity a export chatu | 2.6.0 |
 | `reklamy.user.js` | Skrývání reklam a systémového šeptání | 2.1.2 |
 | `mistnost.user.js` | Vyplnění nové místnosti | 1.0.1 |
 | `historie.user.js` | Zobrazení celé dostupné historie | 1.1.2 |
@@ -25,6 +25,18 @@ Skript se spouští na `https://www.xchat.cz/*`, pouze v hlavním okně; dostupn
 Moduly mají zachovaná původní jména a `@namespace`, tedy identitu pro samostatné instalace. Jejich verze byly zvýšeny o opravu kvůli novým aktualizačním metadatům. Obsah historie funguje i v kontextu společného skriptu s `@grant none`; skrývání reklam a systémového šeptání zahrnuje také celý výpis historie. Vlastní nastavení (sledované nicky, údaje místnosti apod.) zůstávají v odpovídajících modulech.
 
 ## Vydání aktualizace
+
+### Nastavitelná automatická aktualizace (hlavní 1.7.0, export 2.6.0)
+
+V panelu **Nastavení XChatu → Automatická aktualizace** zadej **Interval neaktivity (minuty)** a klikni na **Uložit** nebo stiskni Enter. Výchozí hodnota je 10 minut; lze zadat kladný celý počet minut. Nastavení se ukládá do localStorage pro další otevření XChatu v témže prohlížeči. Pokud prohlížeč uložení nepovolí, panel to oznámí a změna platí jen na aktuální stránce.
+
+Interval řídí automatické odeslání `/S` podle ukazatele neaktivity XChatu. Po uložení platí ihned bez obnovení stránky: pokud je aktuální neaktivita již delší než nová hodnota, příkaz se odešle při nejbližší kontrole, jakmile je pole zprávy prázdné. Rozepsaná zpráva se nepřepisuje, odeslání se neopakuje, dokud ukazatel neaktivity neklesne pod interval. Samostatné okno historie příkaz neodesílá. Kontrola probíhá každou sekundu, její skutečné načasování může ovlivnit uspání karty prohlížečem.
+
+Jde o automatické `/S` v chatu; kontrolu nových verzí userscriptu nadále nastavuje Tampermonkey.
+
+Ověření této změny: `node --test tests/export-idle.test.cjs` — 12 testů nad simulací DOM bez externích závislostí. Pokrývají interval, uložení, znovunačtení, neplatné hodnoty, rozepsanou zprávu, ochranu proti opakovanému odesílání, rámce, obnovu panelu, okno historie a návaznost verzí. Syntaxe všech userscriptů ověřena pomocí `node --check`. Skutečná přihlášená relace XChatu nebyla testována.
+
+### Postup vydání
 
 1. Uprav modul a zvyš jeho `@version` (např. `1.2.2` → `1.2.3`).
 2. V `xchat.user.js` změň parametr příslušného `@require` na stejnou verzi (`zvuky.user.js?v=1.2.3`). Změna URL zajistí nové načtení závislosti místo její staré kopie v mezipaměti.
@@ -177,3 +189,4 @@ V sekci Export chatu je volba Vynechat příchody a odchody. Platí pro TXT, Mar
 Každý nově vytvořený HTML export má také samostatný přepínač Skrýt příchody a odchody, který se kombinuje s filtrem uživatelů a šeptání. Jde o dodatečné skrytí při čtení; záznamy už vynechané před stažením v souboru nejsou a přepínač je nemůže obnovit. Dříve vytvořené exporty se zpětně nemění. Přiložený ukázkový soubor zůstal beze změny.
 
 Prošlo 21 testů včetně filtru všech formátů, přepínání v HTML, zachování běžných zpráv a kontroly vzorku dodaného exportu. Pro vydání nahraj export.user.js 2.5.0 a xchat.user.js 1.6.0; ostatní skripty ani jejich verze se nemění.
+

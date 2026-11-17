@@ -1,15 +1,15 @@
 // ==UserScript==
 // @name         XChat – Čas neaktivity a export chatu
 // @namespace    kamdar.xchat.tools
-// @version      2.5.0
-// @description  Export živého chatu i historie, filtry uživatelů a šeptání.
+// @version      2.6.0
+// @description  Nastavitelný interval automatického /S, export živého chatu i historie, filtry uživatelů a šeptání.
 // @match        https://www.xchat.cz/*
 // @run-at       document-idle
 // @grant        none
 // @noframes
-// @homepageURL  https://github.com/Martin-CHT/Xchat/
-// @updateURL    https://github.com/Martin-CHT/Xchat/raw/refs/heads/main/export.user.js
-// @downloadURL  https://github.com/Martin-CHT/Xchat/raw/refs/heads/main/export.user.js
+// @homepageURL  https://github.com/Kamdar-Wolf/Xchat/
+// @updateURL    https://github.com/Kamdar-Wolf/Xchat/raw/refs/heads/main/export.user.js
+// @downloadURL  https://github.com/Kamdar-Wolf/Xchat/raw/refs/heads/main/export.user.js
 // ==/UserScript==
 
 (() => {
@@ -19,7 +19,13 @@
     //                         NASTAVENÍ
     // ============================================================
 
-    const IDLE_LIMIT_SECONDS = 600; // 600 = 10 minut
+    const DEFAULT_IDLE_INTERVAL_MINUTES = 10;
+    const IDLE_INTERVAL_KEY = 'kamdar.xchat.idleIntervalMinutes';
+    let idleIntervalMinutes = DEFAULT_IDLE_INTERVAL_MINUTES;
+    try {
+        idleIntervalMinutes = parseIdleInterval(localStorage.getItem(IDLE_INTERVAL_KEY))
+            ?? DEFAULT_IDLE_INTERVAL_MINUTES;
+    } catch {}
     const AUTO_COMMAND = '/S';
     const PRESENCE_FILTER_KEY = 'kamdar.xchat.export.hidePresence';
     let hidePresence = false;
@@ -167,6 +173,12 @@
     //                       HLÍDÁNÍ ČASU
     // ============================================================
 
+    function parseIdleInterval(value) {
+        const minutes = Number(value);
+        return Number.isSafeInteger(minutes) && minutes >= 1
+            && Number.isSafeInteger(minutes * 60) ? minutes : null;
+    }
+
     function checkIdle(documents) {
         // Okno historie nic automaticky neodesílá.
         if (IS_HISTORY) return;
@@ -188,7 +200,7 @@
                 + Number(match[3])
             : Number(match[1]) * 60 + Number(match[2]);
 
-        if (seconds <= IDLE_LIMIT_SECONDS) {
+        if (seconds < idleIntervalMinutes * 60) {
             idleHandled = false;
             return;
         }
@@ -1056,11 +1068,74 @@
         panel.appendChild(controls);
     }
 
+    function installIdleSettings(documents) {
+        if (IS_HISTORY) return;
+        const panel = settingsSection(documents, 'idle', 'Automatická aktualizace', 5);
+        if (!panel || panel.querySelector('#xchat-idle-interval')) return;
+        const doc = panel.ownerDocument;
+
+        const label = doc.createElement('label');
+        label.htmlFor = 'xchat-idle-interval';
+        label.textContent = 'Interval neaktivity (minuty):';
+
+        const input = doc.createElement('input');
+        input.id = 'xchat-idle-interval';
+        input.type = 'number';
+        input.min = '1';
+        input.step = '1';
+        input.required = true;
+        input.value = String(idleIntervalMinutes);
+        input.setAttribute('aria-describedby', 'xchat-idle-help xchat-idle-status');
+
+        const save = doc.createElement('button');
+        save.type = 'button';
+        save.textContent = 'Uložit';
+        const actions = doc.createElement('div');
+        actions.style.cssText = 'display:flex;flex-wrap:wrap;align-items:center;gap:5px;';
+        actions.append(input, save);
+
+        const help = doc.createElement('p');
+        help.id = 'xchat-idle-help';
+        help.textContent = 'Po dosažení intervalu neaktivity odešle /S. Rozepsanou zprávu nepřeruší. Změna platí ihned podle aktuální doby neaktivity.';
+        const status = doc.createElement('p');
+        status.id = 'xchat-idle-status';
+        status.setAttribute('aria-live', 'polite');
+        status.textContent = `Aktivní interval: ${idleIntervalMinutes} min.`;
+
+        function saveInterval() {
+            const minutes = parseIdleInterval(input.value);
+            if (minutes === null) {
+                input.setAttribute('aria-invalid', 'true');
+                status.textContent = `Zadej kladný celý počet minut. Aktivní interval zůstává ${idleIntervalMinutes} min.`;
+                return;
+            }
+            input.removeAttribute('aria-invalid');
+            idleIntervalMinutes = minutes;
+            input.value = String(minutes);
+            // Zachováme idleHandled: změna nastavení nesmí opakovat již odeslané /S.
+            try {
+                localStorage.setItem(IDLE_INTERVAL_KEY, String(minutes));
+                status.textContent = `Uloženo. Aktivní interval: ${minutes} min.`;
+            } catch {
+                status.textContent = `Aktivní interval: ${minutes} min. Prohlížeč nepovolil uložení; platí jen do obnovení stránky.`;
+            }
+        }
+        save.addEventListener('click', saveInterval);
+        input.addEventListener('keydown', event => {
+            if (event.key !== 'Enter') return;
+            event.preventDefault();
+            event.stopPropagation();
+            saveInterval();
+        });
+        panel.append(label, actions, help, status);
+    }
+
     function tick() {
         const documents = getDocuments();
 
         try {
             checkIdle(documents);
+            installIdleSettings(documents);
         } catch (error) {
             console.error('XChat: chyba hlídání času.', error);
         }
