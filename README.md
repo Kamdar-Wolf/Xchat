@@ -2,6 +2,12 @@
 
 Jedna instalace do Tampermonkey pro všech šest modulů. Hlavní skript automaticky stáhne a spustí moduly přes `@require`; samostatné položky v seznamu nainstalovaných skriptů nevytváří.
 
+## Samostatná mobilní sada
+
+Pro **m.xchat.cz** je k dispozici **XChat – Mobilní sada 1.0.0**: [instalovat mobilní skript](https://github.com/Kamdar-Wolf/Xchat/raw/refs/heads/main/xchat-mobile.user.js) · [návod a nastavení](mobile/README.md).
+
+Obsahuje vlastní nastavitelný časovač `/s` nezávislý na statickém ukazateli mobilního webu, průběžné načítání zpráv bez obnovení celé stránky, místní historii, exporty s filtry, zvuky, zvýraznění, čáru přečtených zpráv a nastavení předvolby místnosti. Je to druhá instalace s odděleným nastavením; následující návod se týká desktopové sady pro **www.xchat.cz**.
+
 ## Instalace
 
 1. Nahraj všechny soubory `*.user.js` do kořene větve `main` repozitáře `Kamdar-Wolf/Xchat`. Zachovej názvy souborů.
